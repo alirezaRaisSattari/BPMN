@@ -7,6 +7,10 @@ interface Props {
   loading: boolean;
   started: boolean;
   onSend: (text: string) => void;
+  /** Assistant reply streamed so far (SSE); shown as a live-typing bubble. */
+  streamingText?: string;
+  /** Phase-based status line shown while the assistant works. */
+  statusLabel?: string;
 }
 
 const SAMPLES = [
@@ -16,13 +20,21 @@ const SAMPLES = [
   "طراحی فرآیند تصویب پروپوزال پایان‌نامه",
 ];
 
-export function Chat({ messages, awaiting, loading, started, onSend }: Props) {
+export function Chat({
+  messages,
+  awaiting,
+  loading,
+  started,
+  onSend,
+  streamingText,
+  statusLabel,
+}: Props) {
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, loading]);
+  }, [messages.length, loading, streamingText]);
 
   const submit = () => {
     const t = text.trim();
@@ -51,10 +63,19 @@ export function Chat({ messages, awaiting, loading, started, onSend }: Props) {
               <div className="bubble">{m.content}</div>
             </div>
           ))}
-        {loading && (
+        {streamingText ? (
           <div className="msg assistant">
-            <div className="bubble typing">در حال تحلیل…</div>
+            <div className="bubble">
+              {streamingText}
+              <span className="caret" />
+            </div>
           </div>
+        ) : (
+          loading && (
+            <div className="msg assistant">
+              <div className="bubble typing">{statusLabel ?? "در حال تحلیل…"}</div>
+            </div>
+          )
         )}
         <div ref={endRef} />
       </div>

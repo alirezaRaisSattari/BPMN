@@ -1,12 +1,35 @@
-import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SessionStateSchema, type SessionState } from "../schemas/session.js";
+
+/** Lightweight session info for list views (no messages/analysis payload). */
+export interface SessionSummary {
+  id: string;
+  request: string;
+  phase: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+function summarize(session: SessionState): SessionSummary {
+  return {
+    id: session.id,
+    request: session.request,
+    phase: session.phase,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    messageCount: session.messages.length,
+  };
+}
 
 /** Persistence boundary for sessions — swappable for a DB later. */
 export interface SessionStore {
   get(id: string): Promise<SessionState | undefined>;
   save(session: SessionState): Promise<void>;
-  list(): Promise<string[]>;
+  list(): Promise<SessionSummary[]>;
+  /** Remove a session. Resolves to `false` if no such session existed. */
+  remove(id: string): Promise<boolean>;
 }
 
 /** In-memory store (tests / ephemeral use). */
@@ -18,8 +41,13 @@ export class MemorySessionStore implements SessionStore {
   async save(session: SessionState): Promise<void> {
     this.map.set(session.id, session);
   }
-  async list(): Promise<string[]> {
-    return [...this.map.keys()];
+  async list(): Promise<SessionSummary[]> {
+    return [...this.map.values()]
+      .map(summarize)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+  async remove(id: string): Promise<boolean> {
+    return this.map.delete(id);
   }
 }
 
@@ -45,12 +73,34 @@ export class FileSessionStore implements SessionStore {
     await writeFile(this.path(session.id), JSON.stringify(session, null, 2), "utf8");
   }
 
-  async list(): Promise<string[]> {
+  async list(): Promise<SessionSummary[]> {
+    let files: string[];
     try {
-      const files = await readdir(this.dir);
-      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+      files = (await readdir(this.dir)).filter((f) => f.endsWith(".json"));
     } catch {
       return [];
+    }
+    const summaries = await Promise.all(
+      files.map(async (f) => {
+        try {
+          const raw = await readFile(join(this.dir, f), "utf8");
+          return summarize(SessionStateSchema.parse(JSON.parse(raw)));
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    return summaries
+      .filter((s): s is SessionSummary => s !== undefined)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async remove(id: string): Promise<boolean> {
+    try {
+      await rm(this.path(id));
+      return true;
+    } catch {
+      return false;
     }
   }
 }

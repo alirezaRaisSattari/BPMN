@@ -18,6 +18,9 @@ export interface TurnResult {
   processModel?: ProcessModel;
 }
 
+/** Called whenever the turn advances to a new phase (for live progress UIs). */
+export type ProgressFn = (phase: Phase) => void;
+
 const AFFIRM = [
   "بله", "اره", "آره", "تایید", "تأیید", "موافق", "درسته", "اوکی", "قبول",
   "ادامه", "بساز", "ok", "okay", "yes", "confirm", "proceed",
@@ -46,30 +49,30 @@ export class Orchestrator {
   constructor(private readonly ctx: AgentContext) {}
 
   /** Start a new analysis from the initial request. */
-  async begin(session: SessionState, request: string): Promise<TurnResult> {
+  async begin(session: SessionState, request: string, onProgress?: ProgressFn): Promise<TurnResult> {
     session.request = request;
-    session.phase = "elicitation";
+    this.setPhase(session, "elicitation", onProgress);
     addMessage(session, "user", request);
-    return this.runElicitationTurn(session);
+    return this.runElicitationTurn(session, onProgress);
   }
 
   /** Handle a user message according to the current phase. */
-  async respond(session: SessionState, userText: string): Promise<TurnResult> {
+  async respond(session: SessionState, userText: string, onProgress?: ProgressFn): Promise<TurnResult> {
     addMessage(session, "user", userText);
 
     switch (session.phase) {
       case "intake":
       case "elicitation":
         if (isAffirmative(userText) && /(بساز|ادامه|مدل|proceed|بله)/i.test(userText)) {
-          return this.startModelingCascade(session);
+          return this.startModelingCascade(session, onProgress);
         }
-        return this.runElicitationTurn(session);
+        return this.runElicitationTurn(session, onProgress);
       case "implicit_knowledge":
-        return this.handleImplicitConfirmation(session, userText);
+        return this.handleImplicitConfirmation(session, userText, onProgress);
       case "ambiguity":
-        return this.handleAmbiguityPhase(session);
+        return this.handleAmbiguityPhase(session, onProgress);
       case "contradiction":
-        return this.handleContradictionPhase(session);
+        return this.handleContradictionPhase(session, onProgress);
       default:
         return this.result(session, "این مرحله به تعامل بیشتری نیاز ندارد.", false);
     }
@@ -77,7 +80,13 @@ export class Orchestrator {
 
   // ---- phase handlers -------------------------------------------------------
 
-  private async runElicitationTurn(session: SessionState): Promise<TurnResult> {
+  /** Advance the session to a phase and notify any progress listener. */
+  private setPhase(session: SessionState, phase: Phase, onProgress?: ProgressFn): void {
+    session.phase = phase;
+    onProgress?.(phase);
+  }
+
+  private async runElicitationTurn(session: SessionState, onProgress?: ProgressFn): Promise<TurnResult> {
     const res = await runElicitation(this.ctx, session);
 
     for (const r of res.extractedRequirements) {
@@ -99,7 +108,7 @@ export class Orchestrator {
 
     if (res.readyToModel && res.questions.length === 0) {
       addMessage(session, "assistant", res.assistantMessage);
-      return this.startModelingCascade(session);
+      return this.startModelingCascade(session, onProgress);
     }
 
     const reply = [res.assistantMessage, "", bullet(res.questions.map((q) => q.text))]
@@ -110,15 +119,15 @@ export class Orchestrator {
   }
 
   /** After elicitation: roles → explicit rules → propose implicit rules. */
-  private async startModelingCascade(session: SessionState): Promise<TurnResult> {
-    session.phase = "actors";
+  private async startModelingCascade(session: SessionState, onProgress?: ProgressFn): Promise<TurnResult> {
+    this.setPhase(session, "actors", onProgress);
     const actors = await runActors(this.ctx, session);
     for (const role of actors.roles) {
       if (session.roles.some((r) => r.name === role.name)) continue;
       session.roles.push({ id: genId("role"), name: role.name, type: role.type, description: role.description });
     }
 
-    session.phase = "business_rules";
+    this.setPhase(session, "business_rules", onProgress);
     const rules = await runBusinessRules(this.ctx, session);
     for (const r of rules.rules) {
       session.businessRules.push({
@@ -132,7 +141,7 @@ export class Orchestrator {
       });
     }
 
-    session.phase = "implicit_knowledge";
+    this.setPhase(session, "implicit_knowledge", onProgress);
     const implicit = await runImplicit(this.ctx, session);
     const added = implicit.implicitRules.map((r) => {
       const rule = {
@@ -148,7 +157,7 @@ export class Orchestrator {
     });
 
     if (added.length === 0) {
-      return this.handleAmbiguityPhase(session);
+      return this.handleAmbiguityPhase(session, onProgress);
     }
     const reply = [
       "بر اساس دانش دامنه، این «قوانین ضمنی» را پیشنهاد می‌کنم که معمولاً لازم‌اند اما ذکر نمی‌شوند:",
@@ -161,18 +170,22 @@ export class Orchestrator {
     return this.result(session, reply, true);
   }
 
-  private async handleImplicitConfirmation(session: SessionState, userText: string): Promise<TurnResult> {
+  private async handleImplicitConfirmation(
+    session: SessionState,
+    userText: string,
+    onProgress?: ProgressFn,
+  ): Promise<TurnResult> {
     if (isAffirmative(userText)) {
       for (const r of session.businessRules) if (r.kind === "implicit") r.confirmed = true;
       addMessage(session, "assistant", "قوانین ضمنی تأیید شد. حالا ابهام‌ها را بررسی می‌کنم…");
     } else {
       addMessage(session, "assistant", "متوجه شدم؛ نظر شما را لحاظ می‌کنم و ادامه می‌دهم…");
     }
-    return this.handleAmbiguityPhase(session);
+    return this.handleAmbiguityPhase(session, onProgress);
   }
 
-  private async handleAmbiguityPhase(session: SessionState): Promise<TurnResult> {
-    session.phase = "ambiguity";
+  private async handleAmbiguityPhase(session: SessionState, onProgress?: ProgressFn): Promise<TurnResult> {
+    this.setPhase(session, "ambiguity", onProgress);
     const res = await runAmbiguity(this.ctx, session);
     const open = res.ambiguities.filter((a) => a.description.trim());
     if (open.length > 0) {
@@ -192,11 +205,11 @@ export class Orchestrator {
     }
     // mark any previously open ambiguities resolved
     for (const a of session.ambiguities) a.status = "resolved";
-    return this.handleContradictionPhase(session);
+    return this.handleContradictionPhase(session, onProgress);
   }
 
-  private async handleContradictionPhase(session: SessionState): Promise<TurnResult> {
-    session.phase = "contradiction";
+  private async handleContradictionPhase(session: SessionState, onProgress?: ProgressFn): Promise<TurnResult> {
+    this.setPhase(session, "contradiction", onProgress);
     const res = await runContradiction(this.ctx, session);
     const open = res.contradictions.filter((c) => c.description.trim());
     if (open.length > 0) {
@@ -217,17 +230,17 @@ export class Orchestrator {
       return this.result(session, reply, true);
     }
     for (const c of session.contradictions) c.status = "resolved";
-    return this.buildLogicalModel(session);
+    return this.buildLogicalModel(session, onProgress);
   }
 
-  private async buildLogicalModel(session: SessionState): Promise<TurnResult> {
-    session.phase = "logical_model";
+  private async buildLogicalModel(session: SessionState, onProgress?: ProgressFn): Promise<TurnResult> {
+    this.setPhase(session, "logical_model", onProgress);
     const model = await runLogicalModel(this.ctx, session);
     session.processModel = model;
 
-    session.phase = "bpmn_generation";
+    this.setPhase(session, "bpmn_generation", onProgress);
     const { validation } = await produceOutputs(session);
-    session.phase = "done";
+    this.setPhase(session, "done", onProgress);
 
     const status = validation.valid
       ? "مدل از نظر ساختاری معتبر است ✅"
