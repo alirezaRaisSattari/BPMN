@@ -1,0 +1,26 @@
+{
+  "name": "bpmn-analyst",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI Business-Analyst that turns a vague request into a valid BPMN 2.0 model",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @bpmn-analyst/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev -w @bpmn-analyst/server",
+    "dev:web": "npm run dev -w @bpmn-analyst/web",
+    "dev": "npm run build && concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "start": "npm run build && npm run build -w @bpmn-analyst/server && node packages/server/dist/index.js",
+    "smoke:llm": "npm run smoke:llm -w @bpmn-analyst/core",
+    "llm:models": "npm run llm:models -w @bpmn-analyst/core"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "concurrently": "^10.0.3",
+    "typescript": "^5.6.3"
+  }
+}
