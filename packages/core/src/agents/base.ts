@@ -1,11 +1,24 @@
 import type { LLMProvider } from "../llm/index.js";
-import type { KnowledgeRetriever } from "../knowledge/index.js";
+import { formatContext, type KnowledgeRetriever } from "../knowledge/index.js";
+import type { ChunkFilter } from "../knowledge/store.js";
+import type { RetrievalLogEntry, RetrievalResult } from "../schemas/knowledge.js";
+import type { BehaviorAgent } from "../schemas/behavior.js";
 import type { SessionState } from "../schemas/session.js";
+import type { ExampleBank } from "../state/example-store.js";
+import type { BehaviorLookup } from "../state/behavior-store.js";
 
 /** Shared dependencies handed to every analysis agent. */
 export interface AgentContext {
   llm: LLMProvider;
   retriever?: KnowledgeRetriever;
+  /** Called with every retrieval's results + the query — used to record provenance. */
+  onRetrieve?: (results: RetrievalResult[], query: string) => void;
+  /** Telemetry sink for knowledge-gap analysis (session context filled by the orchestrator). */
+  logRetrieval?: (entry: RetrievalLogEntry) => void;
+  /** Worked-example lookup for case-based few-shot (logical-model phase). */
+  exampleBank?: ExampleBank;
+  /** Per-agent behavioral instructions appended to system prompts. */
+  behavior?: BehaviorLookup;
 }
 
 /** The Business-Analyst persona, specialized for university-system processes. */
@@ -59,10 +72,13 @@ export async function ground(
   ctx: AgentContext,
   query: string,
   k = 4,
+  filter?: ChunkFilter,
 ): Promise<string> {
   if (!ctx.retriever) return "";
   try {
-    return await ctx.retriever.retrieveContext(query, k);
+    const results = await ctx.retriever.retrieve(query, k, filter);
+    ctx.onRetrieve?.(results, query);
+    return formatContext(results);
   } catch {
     return "";
   }
@@ -73,4 +89,18 @@ export function knowledgeBlock(text: string): string {
   return text
     ? `دانش مرجع مرتبط (از پایگاه دانش پروژه):\n"""\n${text}\n"""\n`
     : "";
+}
+
+/**
+ * Behavioral instructions for one agent, formatted as a prompt block. These are
+ * admin-approved rules about how the agent should behave; they apply on every
+ * run (unlike RAG knowledge, which only appears when retrieval hits).
+ */
+export function behaviorBlock(ctx: AgentContext, agent: BehaviorAgent): string {
+  const items = ctx.behavior?.instructionsFor(agent) ?? [];
+  if (items.length === 0) return "";
+  return [
+    "دستورهای رفتاری آموخته‌شده (از بازخورد ادمین) — این موارد را در این مرحله رعایت کن:",
+    ...items.map((t) => `- ${t}`),
+  ].join("\n");
 }

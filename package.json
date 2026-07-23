@@ -16,7 +16,8 @@
     "dev": "npm run build && concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run build && npm run build -w @bpmn-analyst/server && node packages/server/dist/index.js",
     "smoke:llm": "npm run smoke:llm -w @bpmn-analyst/core",
-    "llm:models": "npm run llm:models -w @bpmn-analyst/core"
+    "llm:models": "npm run llm:models -w @bpmn-analyst/core",
+    "eval": "npm run eval -w @bpmn-analyst/core"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

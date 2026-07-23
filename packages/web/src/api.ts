@@ -35,6 +35,28 @@ export interface Contradiction {
   severity: string;
   status: string;
 }
+export interface Citation {
+  chunkId: string;
+  docId: string;
+  docTitle: string;
+  kind: string;
+  helpful?: boolean;
+}
+export interface AdminQuestion {
+  id: string;
+  question: string;
+  answer?: string;
+  status: "pending" | "answered";
+  createdAt: string;
+  answeredAt?: string;
+  learnedFeedbackId?: string;
+}
+export interface BpmnCorrection {
+  bpmnXml: string;
+  note: string;
+  at: string;
+  learnedFeedbackId?: string;
+}
 export interface Session {
   id: string;
   phase: string;
@@ -49,6 +71,9 @@ export interface Session {
   contradictions: Contradiction[];
   processModel?: { name: string; activities: unknown[]; gateways: unknown[] };
   outputs: { bpmnXml?: string; summary?: string; document?: string };
+  citations: Citation[];
+  adminQuestions: AdminQuestion[];
+  correction?: BpmnCorrection;
 }
 export interface TurnResponse {
   reply: string;
@@ -175,6 +200,8 @@ export const api = {
   listSessions: () => get<{ sessions: SessionSummary[] }>("/api/sessions"),
   getSession: (id: string) => get<{ session: Session }>(`/api/sessions/${id}`),
   deleteSession: (id: string) => del<{ ok: true }>(`/api/sessions/${id}`),
+  answerQuestion: (id: string, qid: string, answer: string) =>
+    post<{ question: AdminQuestion }>(`/api/sessions/${id}/questions/${qid}/answer`, { answer }),
   bpmnUrl: (id: string) => `/api/sessions/${id}/bpmn`,
   documentUrl: (id: string) => `/api/sessions/${id}/document`,
 };

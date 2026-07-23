@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
 
 export const RulesResultSchema = z.object({
   rules: z
@@ -26,6 +26,7 @@ export async function runBusinessRules(
     "وظیفه: استخراج قوانین کسب‌وکار صریح که کاربر بیان کرده یا مستقیماً از گفته‌های او برمی‌آید.",
     "قوانین ضمنی/پیشنهادی را اینجا نیاور (آن‌ها مرحلهٔ جداگانه دارند). هر قانون یک جملهٔ روشن باشد.",
     knowledgeBlock(grounding),
+    behaviorBlock(ctx, "business_rules"),
     sessionDigest(session),
   ].join("\n\n");
 

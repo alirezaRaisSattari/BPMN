@@ -1,16 +1,20 @@
 import { randomUUID } from "node:crypto";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyReply } from "fastify";
 import type { Phase, SessionState, TurnResult } from "@bpmn-analyst/core";
-import type { AppContext } from "./app.js";
+import type { AppContext, ZodApp } from "./app.js";
+import {
+  CreateSessionBody,
+  MessageBody,
+  AnswerBody,
+  IdParams,
+  SessionQidParams,
+  type TurnResponse,
+  type SessionListResponse,
+  type SessionResponse,
+  type AnswerResponse,
+} from "./schemas.js";
 
-interface CreateBody {
-  request?: string;
-}
-interface MessageBody {
-  message?: string;
-}
-
-function view(session: SessionState, reply: string, awaitingUser: boolean) {
+function view(session: SessionState, reply: string, awaitingUser: boolean): TurnResponse {
   return { reply, awaitingUser, session };
 }
 
@@ -74,30 +78,31 @@ async function runStreamingTurn(
   }
 }
 
-export function registerRoutes(app: FastifyInstance, ctx: AppContext): void {
+export function registerRoutes(app: ZodApp, ctx: AppContext): void {
   // Create a session and run the first (elicitation) turn.
-  app.post<{ Body: CreateBody }>("/api/sessions", async (req, res) => {
-    const request = (req.body?.request ?? "").trim();
-    if (!request) return res.status(400).send({ error: "request is required" });
-
-    const session = ctx.newSession(randomUUID());
-    try {
-      const turn = await ctx.orchestrator.begin(session, request);
-      await ctx.store.save(turn.session);
-      return view(turn.session, turn.reply, turn.awaitingUser);
-    } catch (err) {
-      await ctx.store.save(session);
-      return res.status(502).send({ error: llmError(err), sessionId: session.id });
-    }
-  });
+  app.post(
+    "/api/sessions",
+    { schema: { body: CreateSessionBody } },
+    async (req, res): Promise<TurnResponse | FastifyReply> => {
+      const { request } = req.body;
+      const session = ctx.newSession(randomUUID());
+      try {
+        const turn = await ctx.orchestrator.begin(session, request);
+        await ctx.store.save(turn.session);
+        return view(turn.session, turn.reply, turn.awaitingUser);
+      } catch (err) {
+        await ctx.store.save(session);
+        return res.status(502).send({ error: llmError(err), sessionId: session.id });
+      }
+    },
+  );
 
   // Continue a session with a user message.
-  app.post<{ Params: { id: string }; Body: MessageBody }>(
+  app.post(
     "/api/sessions/:id/messages",
-    async (req, res) => {
-      const message = (req.body?.message ?? "").trim();
-      if (!message) return res.status(400).send({ error: "message is required" });
-
+    { schema: { params: IdParams, body: MessageBody } },
+    async (req, res): Promise<TurnResponse | FastifyReply> => {
+      const { message } = req.body;
       const session = await ctx.store.get(req.params.id);
       if (!session) return res.status(404).send({ error: "session not found" });
 
@@ -113,25 +118,26 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext): void {
   );
 
   // Create a session and stream the first turn live over SSE.
-  app.post<{ Body: CreateBody }>("/api/sessions/stream", async (req, res) => {
-    const request = (req.body?.request ?? "").trim();
-    if (!request) return res.status(400).send({ error: "request is required" });
-
-    const session = ctx.newSession(randomUUID());
-    // Seed the request so the `created` event carries a listable title.
-    session.request = request;
-    await runStreamingTurn(res, ctx, session, (onProgress) =>
-      ctx.orchestrator.begin(session, request, onProgress),
-    );
-  });
+  app.post(
+    "/api/sessions/stream",
+    { schema: { body: CreateSessionBody } },
+    async (req, res) => {
+      const { request } = req.body;
+      const session = ctx.newSession(randomUUID());
+      // Seed the request so the `created` event carries a listable title.
+      session.request = request;
+      await runStreamingTurn(res, ctx, session, (onProgress) =>
+        ctx.orchestrator.begin(session, request, onProgress),
+      );
+    },
+  );
 
   // Continue a session with a user message, streaming the turn live over SSE.
-  app.post<{ Params: { id: string }; Body: MessageBody }>(
+  app.post(
     "/api/sessions/:id/messages/stream",
+    { schema: { params: IdParams, body: MessageBody } },
     async (req, res) => {
-      const message = (req.body?.message ?? "").trim();
-      if (!message) return res.status(400).send({ error: "message is required" });
-
+      const { message } = req.body;
       const session = await ctx.store.get(req.params.id);
       if (!session) return res.status(404).send({ error: "session not found" });
 
@@ -141,33 +147,72 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext): void {
     },
   );
 
-  app.get("/api/sessions", async () => ({ sessions: await ctx.store.list() }));
+  app.get("/api/sessions", async (): Promise<SessionListResponse> => ({
+    sessions: await ctx.store.list(),
+  }));
 
-  app.get<{ Params: { id: string } }>("/api/sessions/:id", async (req, res) => {
-    const session = await ctx.store.get(req.params.id);
-    if (!session) return res.status(404).send({ error: "session not found" });
-    return { session };
-  });
+  app.get(
+    "/api/sessions/:id",
+    { schema: { params: IdParams } },
+    async (req, res): Promise<SessionResponse | FastifyReply> => {
+      const session = await ctx.store.get(req.params.id);
+      if (!session) return res.status(404).send({ error: "session not found" });
+      return { session };
+    },
+  );
 
-  app.delete<{ Params: { id: string } }>("/api/sessions/:id", async (req, res) => {
-    const removed = await ctx.store.remove(req.params.id);
-    if (!removed) return res.status(404).send({ error: "session not found" });
-    return { ok: true };
-  });
+  app.delete(
+    "/api/sessions/:id",
+    { schema: { params: IdParams } },
+    async (req, res) => {
+      const removed = await ctx.store.remove(req.params.id);
+      if (!removed) return res.status(404).send({ error: "session not found" });
+      return { ok: true as const };
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/api/sessions/:id/bpmn", async (req, res) => {
-    const session = await ctx.store.get(req.params.id);
-    const xml = session?.outputs.bpmnXml;
-    if (!xml) return res.status(404).send({ error: "no BPMN yet" });
-    return res.header("Content-Type", "application/xml; charset=utf-8").send(xml);
-  });
+  app.get(
+    "/api/sessions/:id/bpmn",
+    { schema: { params: IdParams } },
+    async (req, res) => {
+      const session = await ctx.store.get(req.params.id);
+      const xml = session?.outputs.bpmnXml;
+      if (!xml) return res.status(404).send({ error: "no BPMN yet" });
+      return res.header("Content-Type", "application/xml; charset=utf-8").send(xml);
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/api/sessions/:id/document", async (req, res) => {
-    const session = await ctx.store.get(req.params.id);
-    const doc = session?.outputs.document;
-    if (!doc) return res.status(404).send({ error: "no document yet" });
-    return res.header("Content-Type", "text/markdown; charset=utf-8").send(doc);
-  });
+  app.get(
+    "/api/sessions/:id/document",
+    { schema: { params: IdParams } },
+    async (req, res) => {
+      const session = await ctx.store.get(req.params.id);
+      const doc = session?.outputs.document;
+      if (!doc) return res.status(404).send({ error: "no document yet" });
+      return res.header("Content-Type", "text/markdown; charset=utf-8").send(doc);
+    },
+  );
+
+  // The end user answers a question an admin posed during review. Public (no
+  // admin token) — the session id is the capability to answer it.
+  app.post(
+    "/api/sessions/:id/questions/:qid/answer",
+    { schema: { params: SessionQidParams, body: AnswerBody } },
+    async (req, res): Promise<AnswerResponse | FastifyReply> => {
+      const { answer } = req.body;
+      const session = await ctx.store.get(req.params.id);
+      if (!session) return res.status(404).send({ error: "session not found" });
+      const q = session.adminQuestions.find((x) => x.id === req.params.qid);
+      if (!q) return res.status(404).send({ error: "question not found" });
+
+      q.answer = answer;
+      q.status = "answered";
+      q.answeredAt = new Date().toISOString();
+      session.updatedAt = q.answeredAt;
+      await ctx.store.save(session);
+      return { question: q };
+    },
+  );
 }
 
 function llmError(err: unknown): string {

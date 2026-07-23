@@ -1,6 +1,35 @@
 import type { SessionState } from "../schemas/session.js";
 import { ProcessModelSchema, type ProcessModel } from "../schemas/process-model.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import type { ExampleEntry } from "../schemas/example.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
+
+/** Compact, readable digest of a model — a worked example for few-shot prompting. */
+function modelDigest(model: ProcessModel): string {
+  const lanes = model.lanes.map((l) => l.name).join("، ") || "—";
+  const acts = model.activities.map((a) => `${a.name} [${a.type}${a.lane ? `@${a.lane}` : ""}]`);
+  const gws = model.gateways.map((g) => `${g.name ?? g.id} (${g.type})`);
+  const conds = model.sequenceFlows
+    .filter((f) => f.condition)
+    .map((f) => `${f.sourceRef}→${f.targetRef}: ${f.condition}`);
+  return [
+    `نام فرآیند: ${model.name}`,
+    `لِین‌ها/نقش‌ها: ${lanes}`,
+    `فعالیت‌ها: ${acts.join(" | ") || "—"}`,
+    `گیت‌وی‌ها: ${gws.join(" | ") || "—"}`,
+    `شرط‌های شاخه: ${conds.join(" | ") || "—"}`,
+  ].join("\n");
+}
+
+/** A domain-matched, admin-approved worked example, formatted for the prompt. */
+function exampleBlock(example: ExampleEntry | undefined): string {
+  if (!example) return "";
+  return [
+    "نمونهٔ کار مشابه (تأییدشده توسط ادمین) — ساختار و سبک آن را الگو بگیر، اما آن را کورکورانه کپی نکن؛",
+    "مدل را بر اساس اطلاعات همین جلسه بساز:",
+    `«درخواست نمونه»: ${example.request}`,
+    modelDigest(example.processModel),
+  ].join("\n");
+}
 
 /**
  * Logical-model agent — compiles the confirmed requirements/roles/rules into an
@@ -17,6 +46,9 @@ export async function runLogicalModel(
     5,
   );
 
+  // Case-based few-shot: show the closest admin-approved worked example, if any.
+  const [example] = ctx.exampleBank?.findSimilar(session.request, 1, session.id) ?? [];
+
   const system = [
     BA_PERSONA,
     "وظیفه: ساخت «مدل منطقی فرآیند» بر اساس اطلاعات تأییدشده. الزامات:",
@@ -29,6 +61,8 @@ export async function runLogicalModel(
     "- lanes را از روی نقش‌ها بساز. dataObjects را برای ورودی/خروجی مهم اضافه کن.",
     "فرآیند را حدس نزن؛ فقط از اطلاعات تأییدشده استفاده کن.",
     knowledgeBlock(grounding),
+    exampleBlock(example),
+    behaviorBlock(ctx, "logical_model"),
     sessionDigest(session),
   ].join("\n\n");
 

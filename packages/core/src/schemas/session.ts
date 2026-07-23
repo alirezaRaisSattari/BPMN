@@ -42,6 +42,40 @@ export const OutputsSchema = z.object({
 });
 export type Outputs = z.infer<typeof OutputsSchema>;
 
+/** A knowledge chunk that grounded the analysis (retrieval provenance). */
+export const CitationSchema = z.object({
+  chunkId: z.string(),
+  docId: z.string(),
+  docTitle: z.string(),
+  kind: z.string(),
+  /** Admin usefulness flag: true = helped, false = irrelevant, unset = unrated. */
+  helpful: z.boolean().optional(),
+});
+export type Citation = z.infer<typeof CitationSchema>;
+
+/** A question an admin asks the end user mid-review, and the user's answer. */
+export const AdminQuestionSchema = z.object({
+  id: z.string().min(1),
+  question: z.string().min(1),
+  answer: z.string().optional(),
+  status: z.enum(["pending", "answered"]).default("pending"),
+  createdAt: z.string(),
+  answeredAt: z.string().optional(),
+  /** Set once an admin has run extraction on the answer (avoids double-learning). */
+  learnedFeedbackId: z.string().optional(),
+});
+export type AdminQuestion = z.infer<typeof AdminQuestionSchema>;
+
+/** An admin-supplied corrected BPMN diagram for a session (before/after signal). */
+export const BpmnCorrectionSchema = z.object({
+  bpmnXml: z.string().min(1),
+  note: z.string().default(""),
+  at: z.string(),
+  /** Set once an admin has mined knowledge from this correction (avoids double-learning). */
+  learnedFeedbackId: z.string().optional(),
+});
+export type BpmnCorrection = z.infer<typeof BpmnCorrectionSchema>;
+
 export const SessionStateSchema = z.object({
   id: z.string().min(1),
   createdAt: z.string(),
@@ -59,6 +93,13 @@ export const SessionStateSchema = z.object({
 
   processModel: ProcessModelSchema.optional(),
   outputs: OutputsSchema.default({}),
+
+  /** Knowledge chunks retrieved while producing this session (deduped). */
+  citations: z.array(CitationSchema).default([]),
+  /** Questions the admin has posed to the user during review. */
+  adminQuestions: z.array(AdminQuestionSchema).default([]),
+  /** Admin's corrected BPMN, if any. */
+  correction: BpmnCorrectionSchema.optional(),
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 

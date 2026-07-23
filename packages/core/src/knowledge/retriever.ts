@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { RetrievalResult } from "../schemas/knowledge.js";
+import type { KnowledgeChunk, RetrievalResult } from "../schemas/knowledge.js";
 import { createLocalEmbedder, type EmbeddingProvider } from "./embeddings.js";
 import { ingestDirectory, type IngestOptions } from "./ingest.js";
 import { KnowledgeStore, type ChunkFilter } from "./store.js";
@@ -10,6 +10,35 @@ export class KnowledgeRetriever {
 
   get size(): number {
     return this.store.size;
+  }
+
+  /** Add chunks to the live index (e.g. admin-approved learned knowledge). */
+  addChunks(chunks: KnowledgeChunk[]): Promise<void> {
+    return this.store.addChunks(chunks);
+  }
+
+  /** Remove a chunk from the live index. */
+  removeChunk(id: string): boolean {
+    return this.store.removeChunk(id);
+  }
+
+  /** Every chunk in the index (including disabled ones), for the admin dashboard. */
+  allChunks(): KnowledgeChunk[] {
+    return this.store.toArray();
+  }
+
+  /** Hide a base chunk from retrieval without deleting it (reversible). */
+  disable(id: string): boolean {
+    return this.store.disable(id);
+  }
+
+  /** Re-enable a previously disabled chunk. */
+  enable(id: string): boolean {
+    return this.store.enable(id);
+  }
+
+  isDisabled(id: string): boolean {
+    return this.store.isDisabled(id);
   }
 
   retrieve(query: string, k = 4, filter?: ChunkFilter): Promise<RetrievalResult[]> {

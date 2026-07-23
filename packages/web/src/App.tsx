@@ -4,6 +4,8 @@ import { Chat } from "./components/Chat";
 import { BpmnViewer } from "./components/BpmnViewer";
 import { RolesPanel, RulesPanel, AnalysisPanel, DocumentPanel } from "./components/Panels";
 import { SessionSidebar } from "./components/SessionSidebar";
+import { AdminPage } from "./components/AdminPage";
+import { AdminQuestionsInbox } from "./components/AdminQuestionsInbox";
 import { PHASE_LABELS } from "./phases";
 
 type Tab = "diagram" | "roles" | "rules" | "analysis" | "document";
@@ -26,10 +28,18 @@ function makePlaceholder(request: string, at: string): Session {
     ambiguities: [],
     contradictions: [],
     outputs: {},
+    citations: [],
+    adminQuestions: [],
   };
 }
 
+/** `#admin` opens the admin panel; anything else shows the chat view. */
+function viewFromHash(): "chat" | "admin" {
+  return window.location.hash === "#admin" ? "admin" : "chat";
+}
+
 export default function App() {
+  const [view, setView] = useState<"chat" | "admin">(viewFromHash);
   const [session, setSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [awaiting, setAwaiting] = useState(true);
@@ -60,6 +70,9 @@ export default function App() {
 
   useEffect(() => {
     refreshSessions();
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   const startNew = () => {
@@ -96,6 +109,18 @@ export default function App() {
       setTab("diagram");
     } catch (e) {
       if (activeKeyRef.current === id) setError(e instanceof Error ? e.message : "خطای ناشناخته");
+    }
+  };
+
+  /** Re-fetch the active session (e.g. after the user answers an admin question). */
+  const reloadActiveSession = async () => {
+    const id = session?.id;
+    if (!id) return;
+    try {
+      const res = await api.getSession(id);
+      if (activeKeyRef.current === id) setSession(res.session);
+    } catch {
+      /* transient; ignore */
     }
   };
 
@@ -193,12 +218,25 @@ export default function App() {
     <div className="app">
       <header>
         <h1>🎓 تحلیل‌گر هوشمند BPMN</h1>
-        <span className="subtitle">دستیار تحلیل فرآیندهای سامانه‌های دانشگاهی</span>
-        {session && <span className="phase">مرحله: {PHASE_LABELS[session.phase] ?? session.phase}</span>}
+        <span className="subtitle">
+          {view === "admin" ? "پنل ادمین — بررسی خروجی‌ها و بازخورد" : "دستیار تحلیل فرآیندهای سامانه‌های دانشگاهی"}
+        </span>
+        {view === "chat" && session && (
+          <span className="phase">مرحله: {PHASE_LABELS[session.phase] ?? session.phase}</span>
+        )}
+        <a
+          className={`admin-link ${view === "admin" || !session ? "push" : ""}`}
+          href={view === "admin" ? "#" : "#admin"}
+        >
+          {view === "admin" ? "بازگشت به گفتگو" : "پنل ادمین"}
+        </a>
       </header>
 
-      {error && <div className="error">⚠️ {error}</div>}
+      {view === "admin" && <AdminPage />}
 
+      {view === "chat" && error && <div className="error">⚠️ {error}</div>}
+
+      {view === "chat" && (
       <main>
         <SessionSidebar
           sessions={sessions}
@@ -210,6 +248,9 @@ export default function App() {
         />
 
         <section className="left">
+          {session && (
+            <AdminQuestionsInbox session={session} onAnswered={reloadActiveSession} />
+          )}
           <Chat
             messages={session?.messages ?? []}
             awaiting={awaiting}
@@ -253,6 +294,7 @@ export default function App() {
           </div>
         </section>
       </main>
+      )}
     </div>
   );
 }

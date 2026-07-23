@@ -16,11 +16,29 @@ export class KnowledgeStore {
   private chunks: KnowledgeChunk[] = [];
   private bm25 = new Bm25Index();
   private byId = new Map<string, KnowledgeChunk>();
+  /** Chunks hidden from retrieval but kept in memory so they can be re-enabled. */
+  private disabled = new Set<string>();
 
   constructor(private readonly embedder?: EmbeddingProvider) {}
 
   get size(): number {
     return this.chunks.length;
+  }
+
+  /** Hide a chunk from retrieval without deleting it (reversible via `enable`). */
+  disable(id: string): boolean {
+    if (!this.byId.has(id)) return false;
+    this.disabled.add(id);
+    return true;
+  }
+
+  /** Un-hide a previously disabled chunk. */
+  enable(id: string): boolean {
+    return this.disabled.delete(id);
+  }
+
+  isDisabled(id: string): boolean {
+    return this.disabled.has(id);
   }
 
   private index(chunk: KnowledgeChunk): void {
@@ -47,8 +65,20 @@ export class KnowledgeStore {
     for (const c of chunks) this.index(c);
   }
 
+  /** Remove a chunk by id. BM25 is rebuilt (cheap at this corpus size). */
+  removeChunk(id: string): boolean {
+    const idx = this.chunks.findIndex((c) => c.id === id);
+    if (idx === -1) return false;
+    this.chunks.splice(idx, 1);
+    this.byId.delete(id);
+    this.bm25 = new Bm25Index();
+    for (const c of this.chunks) this.bm25.add(c.id, `${c.docTitle}\n${c.text}`);
+    return true;
+  }
+
   async search(query: string, k = 4, filter?: ChunkFilter): Promise<RetrievalResult[]> {
-    const pool = filter ? this.chunks.filter(filter) : this.chunks;
+    const admit = (c: KnowledgeChunk) => !this.disabled.has(c.id) && (!filter || filter(c));
+    const pool = this.chunks.filter(admit);
     const canSemantic = this.embedder && pool.some((c) => c.embedding.length > 0);
 
     if (this.embedder && canSemantic) {
@@ -69,7 +99,7 @@ export class KnowledgeStore {
     const results: RetrievalResult[] = [];
     for (const r of this.bm25.search(query, k * 3)) {
       const chunk = this.byId.get(r.id);
-      if (chunk && (!filter || filter(chunk))) results.push({ chunk, score: r.score });
+      if (chunk && admit(chunk)) results.push({ chunk, score: r.score });
       if (results.length >= k) break;
     }
     return results;

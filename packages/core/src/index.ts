@@ -9,3 +9,4 @@ export * from "./agents/index.js";
 export * from "./bpmn/index.js";
 export * from "./output/index.js";
 export * from "./state/index.js";
+export * from "./eval/index.js";

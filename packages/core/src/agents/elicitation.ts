@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requirementCategories } from "../schemas/analysis.js";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
 import { recentChat } from "./chat.js";
 
 export const ElicitationResultSchema = z.object({
@@ -51,6 +51,7 @@ export async function runElicitation(
     "فرآیند را حدس نزن؛ فقط چیزهایی را استخراج کن که کاربر گفته یا تأیید کرده است.",
     "",
     knowledgeBlock(grounding),
+    behaviorBlock(ctx, "elicitation"),
     "وضعیت فعلی تحلیل:",
     sessionDigest(session),
   ].join("\n");

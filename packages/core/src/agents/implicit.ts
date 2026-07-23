@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
 
 export const ImplicitResultSchema = z.object({
   implicitRules: z
@@ -36,6 +36,7 @@ export async function runImplicit(
     "برای هر مورد یک دلیل کوتاه بیاور. فقط موارد مرتبط با همین فرآیند را پیشنهاد بده.",
     "این موارد باید بعداً توسط کاربر تأیید شوند.",
     knowledgeBlock(grounding),
+    behaviorBlock(ctx, "implicit"),
     sessionDigest(session),
   ].join("\n\n");
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, sessionDigest } from "./base.js";
 import { recentChat } from "./chat.js";
 
 export const AmbiguityResultSchema = z.object({
@@ -27,6 +27,7 @@ export async function runAmbiguity(
     BA_PERSONA,
     "وظیفه: شناسایی ابهام‌هایی که مانع نهایی‌سازی مدل می‌شوند. برای هر ابهام یک سؤال روشن‌کننده بده.",
     "اگر اطلاعات کافی و بدون ابهام است، آرایهٔ خالی برگردان. فرآیند را حدس نزن.",
+    behaviorBlock(ctx, "ambiguity"),
     sessionDigest(session),
   ].join("\n\n");
 

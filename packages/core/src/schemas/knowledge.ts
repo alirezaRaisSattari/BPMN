@@ -33,3 +33,18 @@ export const RetrievalResultSchema = z.object({
   score: z.number(),
 });
 export type RetrievalResult = z.infer<typeof RetrievalResultSchema>;
+
+/**
+ * One retrieval, logged for knowledge-gap analysis. `topScore` near zero (or
+ * empty `chunkIds`) means the knowledge base could not ground the query — a
+ * signal to the admin about which document to write next.
+ */
+export const RetrievalLogEntrySchema = z.object({
+  at: z.string(),
+  sessionId: z.string(),
+  phase: z.string(),
+  query: z.string(),
+  topScore: z.number(),
+  chunkIds: z.array(z.string()).default([]),
+});
+export type RetrievalLogEntry = z.infer<typeof RetrievalLogEntrySchema>;

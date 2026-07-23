@@ -77,9 +77,45 @@ export function AnalysisPanel({ session }: { session: Session }) {
   );
 }
 
+const KIND_LABELS: Record<string, string> = {
+  bpmn_guideline: "اصول BPMN",
+  validation: "اعتبارسنجی",
+  domain: "دانش دامنه",
+  glossary: "واژه‌نامه",
+  "learned-from-feedback": "دانش آموخته",
+  other: "سایر",
+};
+
+/** Distinct knowledge sources that grounded this analysis (retrieval provenance). */
+export function SourcesPanel({ session }: { session: Session }) {
+  const citations = session.citations ?? [];
+  if (citations.length === 0) return null;
+  const byDoc = new Map<string, { title: string; kind: string }>();
+  for (const c of citations) byDoc.set(c.docId, { title: c.docTitle, kind: c.kind });
+  return (
+    <div className="sources">
+      <h4>دانش استفاده‌شده در این تحلیل</h4>
+      <ul className="cards">
+        {[...byDoc.entries()].map(([docId, d]) => (
+          <li key={docId} className="card sources-item">
+            <span className="tag">{KIND_LABELS[d.kind] ?? d.kind}</span> {d.title}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function DocumentPanel({ session }: { session: Session }) {
   const doc = session.outputs.document;
-  if (!doc) return <Empty text="مستند نهایی پس از تکمیل تحلیل آماده می‌شود." />;
+  if (!doc) {
+    return (
+      <div>
+        <SourcesPanel session={session} />
+        <Empty text="مستند نهایی پس از تکمیل تحلیل آماده می‌شود." />
+      </div>
+    );
+  }
   return (
     <div>
       <div className="doc-actions">
@@ -91,6 +127,7 @@ export function DocumentPanel({ session }: { session: Session }) {
         </a>
       </div>
       <pre className="document">{doc}</pre>
+      <SourcesPanel session={session} />
     </div>
   );
 }

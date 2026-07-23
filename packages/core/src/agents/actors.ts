@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
 
 export const ActorsResultSchema = z.object({
   roles: z
@@ -17,12 +17,21 @@ export type ActorsResult = z.infer<typeof ActorsResultSchema>;
 
 /** Actor/role identification agent. */
 export async function runActors(ctx: AgentContext, session: SessionState): Promise<ActorsResult> {
-  const grounding = await ground(ctx, `نقش‌های دخیل در ${session.request} در سامانه دانشگاهی`, 3);
+  // Anchor role naming to learned terminology: prefer glossary/domain knowledge so
+  // lane names stay consistent across sessions.
+  const grounding = await ground(
+    ctx,
+    `نقش‌های دخیل در ${session.request} در سامانه دانشگاهی`,
+    3,
+    (c) => c.kind === "glossary" || c.kind === "domain",
+  );
   const system = [
     BA_PERSONA,
     "وظیفه: شناسایی همهٔ نقش‌های دخیل در فرآیند (شامل نقش «سیستم» برای فعالیت‌های خودکار).",
     "فقط نقش‌هایی را بیاور که از گفته‌های کاربر یا ماهیت فرآیند قابل‌استنتاج‌اند.",
+    "برای نام‌گذاری نقش‌ها، در صورت وجود، از اصطلاحات واژه‌نامه و دانش دامنه استفاده کن تا نام‌ها یکدست بمانند.",
     knowledgeBlock(grounding),
+    behaviorBlock(ctx, "actors"),
     sessionDigest(session),
   ].join("\n\n");
 

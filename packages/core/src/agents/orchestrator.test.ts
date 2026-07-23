@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { MockProvider } from "../llm/mock.js";
 import { newSession } from "../schemas/session.js";
+import { KnowledgeStore } from "../knowledge/store.js";
+import { KnowledgeRetriever } from "../knowledge/retriever.js";
 import { Orchestrator } from "./orchestrator.js";
 
 const readyFixtures = {
@@ -51,6 +53,33 @@ describe("Orchestrator", () => {
     expect(session.roles.map((r) => r.name)).toContain("سیستم");
     expect(session.businessRules.some((r) => r.kind === "explicit")).toBe(true);
     expect(session.processModel?.activities.length).toBe(1);
+  });
+
+  it("records retrieval provenance (citations) from grounded phases", async () => {
+    const llm = new MockProvider(readyFixtures);
+    const store = new KnowledgeStore();
+    await store.addChunks([
+      {
+        id: "g#0",
+        docId: "bpmn-guidelines",
+        docTitle: "BPMN Guidelines",
+        kind: "bpmn_guideline",
+        text: "هر فرآیند باید یک رویداد شروع و پایان داشته باشد و نقش‌ها و مراحل مشخص باشند.",
+        embedding: [],
+        tags: [],
+      },
+    ]);
+    const retriever = new KnowledgeRetriever(store);
+    const orch = new Orchestrator({ llm, retriever });
+    const session = newSession("s-cite");
+
+    await orch.begin(session, "طراحی فرآیند ثبت‌نام دانشجو");
+
+    expect(session.citations.length).toBeGreaterThan(0);
+    expect(session.citations[0]?.docId).toBe("bpmn-guidelines");
+    // deduped by chunkId even though many phases retrieve
+    const ids = session.citations.map((c) => c.chunkId);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("asks clarifying questions when not ready and waits for the user", async () => {

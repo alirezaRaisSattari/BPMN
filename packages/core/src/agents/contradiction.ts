@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SessionState } from "../schemas/session.js";
-import { AgentContext, BA_PERSONA, ground, knowledgeBlock, sessionDigest } from "./base.js";
+import { AgentContext, BA_PERSONA, behaviorBlock, ground, knowledgeBlock, sessionDigest } from "./base.js";
 import { recentChat } from "./chat.js";
 
 export const ContradictionResultSchema = z.object({
@@ -34,6 +34,7 @@ export async function runContradiction(
     "- قوانین ناسازگار با یکدیگر. برای هر تناقض راهکار پیشنهاد بده.",
     "اگر تناقضی نیست، آرایهٔ خالی برگردان.",
     knowledgeBlock(grounding),
+    behaviorBlock(ctx, "contradiction"),
     sessionDigest(session),
   ].join("\n\n");
 

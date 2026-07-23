@@ -8,4 +8,7 @@ export * from "./ambiguity.js";
 export * from "./contradiction.js";
 export * from "./logical-model.js";
 export * from "./reviewer.js";
+export * from "./feedback-extractor.js";
+export * from "./conflict-check.js";
+export * from "./correction-diff.js";
 export * from "./orchestrator.js";

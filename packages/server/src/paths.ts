@@ -19,5 +19,12 @@ export function repoPaths(root = findRepoRoot()) {
     knowledgeDir: join(root, "knowledge"),
     indexPath: join(root, "data", "knowledge-index.json"),
     sessionsDir: join(root, "data", "sessions"),
+    feedbackDir: join(root, "data", "feedback"),
+    learnedPath: join(root, "data", "learned-knowledge.json"),
+    evalDir: join(root, "data", "eval"),
+    retrievalLogPath: join(root, "data", "retrieval-log.jsonl"),
+    overridesPath: join(root, "data", "knowledge-overrides.json"),
+    examplesPath: join(root, "data", "examples.json"),
+    behaviorPath: join(root, "data", "behavior.json"),
   };
 }
