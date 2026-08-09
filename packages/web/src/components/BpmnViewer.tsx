@@ -9,10 +9,21 @@ interface Canvas {
 
 export function BpmnViewer({ xml }: { xml?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<NavigatedViewer | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || !xml) return;
+    if (!containerRef.current) return;
     const viewer = new NavigatedViewer({ container: containerRef.current });
+    viewerRef.current = viewer;
+    return () => {
+      viewerRef.current = null;
+      viewer.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !xml) return;
     let cancelled = false;
     viewer
       .importXML(xml)
@@ -20,15 +31,18 @@ export function BpmnViewer({ xml }: { xml?: string }) {
         if (cancelled) return;
         viewer.get<Canvas>("canvas").zoom("fit-viewport");
       })
-      .catch((err: unknown) => console.error("BPMN import failed:", err));
+      .catch((err: unknown) => {
+        if (!cancelled && viewerRef.current === viewer) console.error("BPMN import failed:", err);
+      });
     return () => {
       cancelled = true;
-      viewer.destroy();
     };
   }, [xml]);
 
-  if (!xml) {
-    return <div className="placeholder">پس از تکمیل تحلیل، نمودار BPMN اینجا نمایش داده می‌شود.</div>;
-  }
-  return <div className="bpmn-canvas" ref={containerRef} dir="ltr" />;
+  return (
+    <div className="bpmn-viewer">
+      {!xml && <div className="placeholder">پس از تکمیل تحلیل، نمودار BPMN اینجا نمایش داده می‌شود.</div>}
+      <div className="bpmn-canvas" ref={containerRef} dir="ltr" />
+    </div>
+  );
 }

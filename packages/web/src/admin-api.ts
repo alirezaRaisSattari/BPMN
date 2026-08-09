@@ -209,13 +209,13 @@ export const adminApi = {
     request<{ chunks: KnowledgeChunkInfo[] }>("GET", "/api/admin/knowledge"),
   knowledgeGaps: () => request<{ gaps: KnowledgeGap[] }>("GET", "/api/admin/knowledge/gaps"),
   disableChunk: (id: string) =>
-    request<{ ok: true; disabled: boolean }>("POST", `/api/admin/knowledge/${id}/disable`, {}),
+    request<{ ok: true; disabled: boolean }>("POST", `/api/admin/knowledge/${encodeURIComponent(id)}/disable`, {}),
   enableChunk: (id: string) =>
-    request<{ ok: true; disabled: boolean }>("POST", `/api/admin/knowledge/${id}/enable`, {}),
+    request<{ ok: true; disabled: boolean }>("POST", `/api/admin/knowledge/${encodeURIComponent(id)}/enable`, {}),
   flagCitation: (sessionId: string, chunkId: string, helpful: boolean | null) =>
     request<{ citation: unknown }>(
       "POST",
-      `/api/admin/sessions/${sessionId}/citations/${chunkId}/flag`,
+      `/api/admin/sessions/${sessionId}/citations/${encodeURIComponent(chunkId)}/flag`,
       { helpful },
     ),
 

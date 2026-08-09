@@ -14,7 +14,12 @@
     "dev:server": ".venv\\Scripts\\python.exe -m bpmn_analyst",
     "dev:web": "npm run dev -w @bpmn-analyst/web",
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "start": ".venv\\Scripts\\python.exe -m bpmn_analyst"
+    "start": ".venv\\Scripts\\python.exe -m bpmn_analyst",
+    "smoke:llm": ".venv\\Scripts\\python.exe -m bpmn_analyst.cli smoke-llm",
+    "llm:models": ".venv\\Scripts\\python.exe -m bpmn_analyst.cli llm-models",
+    "smoke:knowledge": ".venv\\Scripts\\python.exe -m bpmn_analyst.cli smoke-knowledge",
+    "eval": ".venv\\Scripts\\python.exe -m bpmn_analyst.cli eval",
+    "e2e:real": ".venv\\Scripts\\python.exe tests\\real_llm_journey.py"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"
