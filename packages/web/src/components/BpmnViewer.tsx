@@ -9,21 +9,10 @@ interface Canvas {
 
 export function BpmnViewer({ xml }: { xml?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<NavigatedViewer | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !xml) return;
     const viewer = new NavigatedViewer({ container: containerRef.current });
-    viewerRef.current = viewer;
-    return () => {
-      viewer.destroy();
-      viewerRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !xml) return;
     let cancelled = false;
     viewer
       .importXML(xml)
@@ -34,6 +23,7 @@ export function BpmnViewer({ xml }: { xml?: string }) {
       .catch((err: unknown) => console.error("BPMN import failed:", err));
     return () => {
       cancelled = true;
+      viewer.destroy();
     };
   }, [xml]);
 

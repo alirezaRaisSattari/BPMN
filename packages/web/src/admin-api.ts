@@ -150,8 +150,7 @@ export function clearAdminToken(): void {
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  // Only send Content-Type with an actual body — Fastify rejects an empty
-  // JSON-typed body (e.g. on DELETE) with FST_ERR_CTP_EMPTY_JSON_BODY.
+  // Only send Content-Type when a JSON body exists.
   const headers: Record<string, string> = { "x-admin-token": getAdminToken() };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(url, {

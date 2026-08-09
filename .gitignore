@@ -4,6 +4,12 @@
 
 # dependencies
 node_modules/
+*.egg-info/
+.venv/
+__pycache__/
+.pytest_cache/
+graphify-out/
+test-results/
 **/node_modules/
 
 # build output
